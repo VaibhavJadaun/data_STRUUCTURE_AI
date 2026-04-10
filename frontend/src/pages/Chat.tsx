@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Avatar, Typography, Button, IconButton } from "@mui/material";
 import red from "@mui/material/colors/red";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import ChatItem from "../components/chat/ChatItem";
 import { IoMdSend } from "react-icons/io";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +11,7 @@ import {
   sendChatRequest,
 } from "../helpers/api-communicator";
 import toast from "react-hot-toast";
+import { getUserInitials } from "../utils/userInitials";
 type Message = {
   role: "user" | "assistant";
   content: string;
@@ -21,15 +22,26 @@ const Chat = () => {
   const auth = useAuth();
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const handleSubmit = async () => {
-    const content = inputRef.current?.value as string;
-    if (inputRef && inputRef.current) {
-      inputRef.current.value = "";
+    const raw = inputRef.current?.value ?? "";
+    const content = raw.trim();
+    if (!content) {
+      toast.error("Please enter a message");
+      return;
     }
+    if (inputRef.current) inputRef.current.value = "";
+
     const newMessage: Message = { role: "user", content };
     setChatMessages((prev) => [...prev, newMessage]);
-    const chatData = await sendChatRequest(content);
-    setChatMessages([...chatData.chats]);
-    //
+    try {
+      const chatData = await sendChatRequest(content);
+      if (chatData?.chats?.length) {
+        setChatMessages([...chatData.chats]);
+      }
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Could not get a reply. Try again.";
+      toast.error(msg);
+    }
   };
   const handleDeleteChats = async () => {
     try {
@@ -99,15 +111,15 @@ const Chat = () => {
               fontWeight: 700,
             }}
           >
-            {auth?.user?.name[0]}
-            {auth?.user?.name.split(" ")[1][0]}
+            {getUserInitials(auth?.user?.name)}
           </Avatar>
           <Typography sx={{ mx: "auto", fontFamily: "work sans" }}>
-            You are talking to a ChatBOT
+            DSA tutor chatbot
           </Typography>
           <Typography sx={{ mx: "auto", fontFamily: "work sans", my: 4, p: 3 }}>
-            You can ask some questions related to Knowledge, Business, Advices,
-            Education, etc. But avoid sharing personal information
+            Ask only Data Structures & Algorithms questions — for example
+            arrays, trees, graphs, sorting, DP, complexity, and interview-style
+            problems. Other topics will not be answered here.
           </Typography>
           <Button
             onClick={handleDeleteChats}
@@ -145,7 +157,20 @@ const Chat = () => {
             fontWeight: "600",
           }}
         >
-          Model - GPT 3.5 Turbo
+          DSA assistant
+        </Typography>
+        <Typography
+          sx={{
+            fontSize: 14,
+            color: "rgba(219, 216, 227, 0.75)",
+            mb: 2,
+            mx: "auto",
+            textAlign: "center",
+            px: 2,
+            maxWidth: 560,
+          }}
+        >
+          This chat answers DSA topics only (data structures, algorithms, complexity).
         </Typography>
         <Box
           sx={{
@@ -178,6 +203,7 @@ const Chat = () => {
           <input
             ref={inputRef}
             type="text"
+            placeholder="Ask a DSA-only question (e.g. explain heaps, Big-O of merge sort)…"
             style={{
               width: "100%",
               backgroundColor: "transparent",

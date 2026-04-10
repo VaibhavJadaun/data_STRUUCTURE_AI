@@ -22,21 +22,26 @@ export const signupUser = async (
 };
 
 export const checkAuthStatus = async () => {
-  const res = await axios.get("/user/auth-status");
-  if (res.status !== 200) {
-    throw new Error("Unable to authenticate");
-  }
-  const data = await res.data;
-  return data;
+  const res = await axios.get("/user/auth-status", {
+    validateStatus: (status) => status === 200 || status === 401,
+  });
+  if (res.status === 401) return null;
+  return res.data;
 };
 
 export const sendChatRequest = async (message: string) => {
-  const res = await axios.post("/chat/new", { message });
-  if (res.status !== 200) {
-    throw new Error("Unable to send chat");
+  try {
+    const res = await axios.post("/chat/new", { message });
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.data) {
+      const body = err.response.data as { message?: string };
+      if (typeof body.message === "string") {
+        throw new Error(body.message);
+      }
+    }
+    throw err instanceof Error ? err : new Error("Unable to send chat");
   }
-  const data = await res.data;
-  return data;
 };
 
 export const getUserChats = async () => {

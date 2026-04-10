@@ -1,13 +1,18 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { COOKIE_NAME } from "./constants.js";
+
+function getJwtSecret(): Secret {
+  const s = process.env.JWT_SECRET?.trim();
+  if (!s) throw new Error("JWT_SECRET is not set");
+  return s;
+}
 
 export const createToken = (id: string, email: string, expiresIn: string) => {
   const payload = { id, email };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn,
-  });
-  return token;
+  } as SignOptions);
 };
 
 export const verifyToken = async (
@@ -20,7 +25,7 @@ export const verifyToken = async (
     return res.status(401).json({ message: "Token Not Received" });
   }
   return new Promise<void>((resolve, reject) => {
-    return jwt.verify(token, process.env.JWT_SECRET, (err, success) => {
+    return jwt.verify(token, getJwtSecret(), (err, success) => {
       if (err) {
         reject(err.message);
         return res.status(401).json({ message: "Token Expired" });

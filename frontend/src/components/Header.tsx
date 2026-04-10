@@ -1,8 +1,8 @@
-import React from "react";
+
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import Logo from "./shared/Logo";
-import { useAuth } from "../context/AuthContext";
+
+import { useAuth } from "../context/useAuth";
 import NavigationLink from "./shared/NavigationLink";
 
 const Header = () => {
@@ -12,7 +12,7 @@ const Header = () => {
       sx={{ bgcolor: "transparent", position: "static", boxShadow: "none" }}
     >
       <Toolbar sx={{ display: "flex" }}>
-        <Logo />
+        <h3 style={{color:"white",fontSize:"24px"}}>DSA Tutor</h3>
         <div>
           {auth?.isLoggedIn ? (
             <>
@@ -21,6 +21,12 @@ const Header = () => {
                 to="/chat"
                 text="Go To Chat"
                 textColor="black"
+              />
+              <NavigationLink
+                bg="#7C4DFF"
+                to="/complexity"
+                text="Complexity Calculator"
+                textColor="#DBD8E3"
               />
               <NavigationLink
                 bg="#51538f"

@@ -1,31 +1,11 @@
 import React from "react";
 import { Box, Avatar, Typography } from "@mui/material";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
+import { getUserInitials } from "../../utils/userInitials";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-
-function extractCodeFromString(message: string) {
-  if (message.includes("```")) {
-    const blocks = message.split("```");
-    return blocks;
-  }
-}
-
-function isCodeBlock(str: string) {
-  if (
-    str.includes("=") ||
-    str.includes(";") ||
-    str.includes("[") ||
-    str.includes("]") ||
-    str.includes("{") ||
-    str.includes("}") ||
-    str.includes("#") ||
-    str.includes("//")
-  ) {
-    return true;
-  }
-  return false;
-}
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 const ChatItem = ({
   content,
   role,
@@ -33,7 +13,6 @@ const ChatItem = ({
   content: string;
   role: "user" | "assistant";
 }) => {
-  const messageBlocks = extractCodeFromString(content);
   const auth = useAuth();
   return role == "assistant" ? (
     <Box
@@ -50,20 +29,38 @@ const ChatItem = ({
         <img src="openai.png" alt="openai" width={"30px"} />
       </Avatar>
       <Box>
-        {!messageBlocks && (
-          <Typography sx={{ fontSize: "20px" }}>{content}</Typography>
-        )}
-        {messageBlocks &&
-          messageBlocks.length &&
-          messageBlocks.map((block) =>
-            isCodeBlock(block) ? (
-              <SyntaxHighlighter style={coldarkDark} language="javascript">
-                {block}
-              </SyntaxHighlighter>
-            ) : (
-              <Typography sx={{ fontSize: "20px" }}>{block}</Typography>
-            )
-          )}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => <Typography sx={{ fontSize: "20px" }}>{children}</Typography>,
+            li: ({ children }) => (
+              <Typography component="li" sx={{ fontSize: "18px", ml: 3 }}>
+                {children}
+              </Typography>
+            ),
+            code({ inline, className, children, ...props }) {
+              const match = /language-(\w+)/.exec(className || "");
+              if (inline) {
+                return (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                );
+              }
+              return (
+                <SyntaxHighlighter
+                  style={coldarkDark}
+                  language={match?.[1] || "javascript"}
+                  PreTag="div"
+                >
+                  {String(children).replace(/\n$/, "")}
+                </SyntaxHighlighter>
+              );
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
       </Box>
     </Box>
   ) : (
@@ -77,24 +74,10 @@ const ChatItem = ({
       }}
     >
       <Avatar sx={{ ml: "0", bgcolor: "black", color: "#DBD8E3" }}>
-        {auth?.user?.name[0]}
-        {auth?.user?.name.split(" ")[1][0]}
+        {getUserInitials(auth?.user?.name)}
       </Avatar>
       <Box>
-        {!messageBlocks && (
-          <Typography sx={{ fontSize: "20px" }}>{content}</Typography>
-        )}
-        {messageBlocks &&
-          messageBlocks.length &&
-          messageBlocks.map((block) =>
-            isCodeBlock(block) ? (
-              <SyntaxHighlighter style={coldarkDark} language="javascript">
-                {block}
-              </SyntaxHighlighter>
-            ) : (
-              <Typography sx={{ fontSize: "20px" }}>{block}</Typography>
-            )
-          )}
+        <Typography sx={{ fontSize: "20px" }}>{content}</Typography>
       </Box>
     </Box>
   );
