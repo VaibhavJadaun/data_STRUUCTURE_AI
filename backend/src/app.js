@@ -16,12 +16,28 @@ if (!cookieSecret) {
     throw new Error("Set JWT_SECRET (or COOKIE_SECRET) in .env — required for signed cookies.");
 }
 const app = express();
-//middlewares
-app.use(cors({ origin: "https://majorproject-3-poq8.onrender.com", credentials: true }));
+//middlewares — Origin is the *frontend* URL (comma-separated allowed)
+const corsRaw = process.env.FRONTEND_URL?.trim() ||
+    process.env.CORS_ORIGIN?.trim() ||
+    "http://localhost:5173";
+const allowedOrigins = corsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+    origin: (origin, cb) => {
+        if (!origin)
+            return cb(null, true);
+        if (allowedOrigins.includes(origin))
+            return cb(null, true);
+        return cb(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+}));
 app.use(express.json());
 app.use(cookieParser(cookieSecret));
 //remove it in production
 app.use(morgan("dev"));
+app.get("/", (_req, res) => {
+    res.status(200).json({ ok: true, message: "API up", api: "/api/v1" });
+});
 app.use("/api/v1", appRouter);
 export default app;
 //# sourceMappingURL=app.js.map

@@ -51,6 +51,11 @@ app.use(cookieParser(cookieSecret));
 //remove it in production
 app.use(morgan("dev"));
 
+// Root hits (browser, Render uptime probes) — API lives under /api/v1
+app.get("/", (_req, res) => {
+  res.status(200).json({ ok: true, message: "API up", api: "/api/v1" });
+});
+
 app.get("/api/v1/health", (_req, res) => res.status(200).json({ ok: true }));
 
 app.use("/api/v1", appRouter);

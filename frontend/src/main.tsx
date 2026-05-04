@@ -8,15 +8,19 @@ import { AuthProvider } from "./context/AuthContext.tsx";
 import { Toaster } from "react-hot-toast";
 import axios from "axios";
 
+/** Deployed backend on Render (axios paths are relative to this). */
+const PRODUCTION_API_BASE_URL =
+  "https://majorproject-3-poq8.onrender.com/api/v1";
+
 function resolveApiBaseUrl(): string {
-  // Prefer same-origin in production when frontend is proxied behind backend/reverse-proxy.
-  // For local dev, fall back to common backend port.
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") return "http://localhost:5000/api/v1";
-    return "/api/v1";
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:5000/api/v1";
+    }
+    return PRODUCTION_API_BASE_URL;
   }
-  return "/api/v1";
+  return PRODUCTION_API_BASE_URL;
 }
 
 axios.defaults.baseURL = resolveApiBaseUrl();
