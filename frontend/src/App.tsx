@@ -5,9 +5,10 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Chat from "./pages/Chat";
 import Complexity from "./pages/Complexity";
+import CodeReview from "./pages/CodeReview";
+import Quiz from "./pages/Quiz";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./context/useAuth";
-import Footer from "./components/footer/Footer";
 function App() {
   const auth = useAuth();
 
@@ -22,6 +23,8 @@ function App() {
           <>
             <Route path="/chat" element={<Chat />} />
             <Route path="/complexity" element={<Complexity />} />
+            <Route path="/code-review" element={<CodeReview />} />
+            <Route path="/quiz" element={<Quiz />} />
           </>
         )}
         <Route path="*" element={<NotFound />} />

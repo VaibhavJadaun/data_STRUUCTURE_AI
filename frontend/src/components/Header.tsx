@@ -29,6 +29,18 @@ const Header = () => {
                 textColor="#DBD8E3"
               />
               <NavigationLink
+                bg="#1f8b7b"
+                to="/code-review"
+                text="Code Review"
+                textColor="#DBD8E3"
+              />
+              <NavigationLink
+                bg="#2A5D47"
+                to="/quiz"
+                text="Start Quiz"
+                textColor="#DBD8E3"
+              />
+              <NavigationLink
                 bg="#51538f"
                 textColor="#DBD8E3"
                 to="/"

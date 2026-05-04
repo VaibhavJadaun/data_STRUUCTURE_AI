@@ -36,3 +36,15 @@ export const chatCompletionValidator = [
     .notEmpty()
     .withMessage("Message is required"),
 ];
+
+export const chatEditValidator = [
+  body("content")
+    .trim()
+    .notEmpty()
+    .withMessage("content is required"),
+];
+
+export const reviewCodeValidator = [
+  body("code").trim().notEmpty().withMessage("code is required"),
+  body("language").optional().isString().withMessage("language must be a string"),
+];

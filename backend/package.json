@@ -5,7 +5,7 @@
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npx tsc --watch\" \"nodemon -q dist/index.js\" ",
+    "dev": "concurrently \"npx tsc --watch\" \"nodemon -q --signal SIGTERM --delay 750ms dist/index.js\"",
     "build": "tsc",
     "start": "node dist/index.js"
   },

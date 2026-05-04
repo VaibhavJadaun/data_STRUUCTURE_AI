@@ -10,12 +10,49 @@ export type ComplexityResult = {
 
 type Parsed = ReturnType<typeof parse>;
 
-function safeParse(code: string): Parsed {
+function preprocessCodeForAcorn(input: string): string {
+  // The calculator UI says "JS snippets", but users often paste TS-flavored JS.
+  // Keep this conservative so we don't accidentally "rewrite" real JS semantics.
+  let code = input;
+
+  // Remove leading/trailing fences if user pasted Markdown code block.
+  code = code.replace(/^\s*```[\w-]*\s*\n/, "").replace(/\n\s*```\s*$/, "");
+
+  // Strip simple TypeScript annotations: `x: T`, `(x: T, y: U) =>`, `): R =>`
+  // This is a heuristic and intentionally avoids trying to parse nested/complex types.
+  code = code.replace(
+    /([a-zA-Z_$][\w$]*)\s*:\s*[a-zA-Z_$][\w$<>, \t[\]\|&.]*/g,
+    "$1"
+  );
+
+  // Strip `as Type` assertions.
+  code = code.replace(/\s+as\s+[a-zA-Z_$][\w$<>, \t[\]\|&.]*/g, "");
+
+  // Remove TS-only declarations that often appear at top-level.
+  code = code.replace(/^\s*(export\s+)?interface\s+\w[\s\S]*?\n}\s*$/gm, "");
+  code = code.replace(/^\s*(export\s+)?type\s+\w[\s\S]*?;\s*$/gm, "");
+  code = code.replace(/^\s*(export\s+)?enum\s+\w[\s\S]*?\n}\s*$/gm, "");
+
+  return code;
+}
+
+function tryParse(code: string, sourceType: "module" | "script"): Parsed {
   return parse(code, {
     ecmaVersion: "latest",
-    sourceType: "module",
+    sourceType,
     allowHashBang: true,
+    allowAwaitOutsideFunction: true,
   }) as Parsed;
+}
+
+function safeParse(code: string): Parsed {
+  const pre = preprocessCodeForAcorn(code);
+  try {
+    return tryParse(pre, "module");
+  } catch {
+    // Many snippets aren’t modules (no imports/exports). Fall back to script mode.
+    return tryParse(pre, "script");
+  }
 }
 
 function isLoopNode(node: any) {
@@ -38,6 +75,43 @@ function looksLikeLogLoop(testOrUpdate: any): boolean {
   );
 }
 
+function estimateFromText(code: string): ComplexityResult | null {
+  const raw = code ?? "";
+  const notes: string[] = [];
+  const cleaned = raw
+    .replace(/^\s*```[\w-]*\s*\n/, "")
+    .replace(/\n\s*```\s*$/, "")
+    .replace(/\/\/.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // Very rough fallback for non-JS languages: look for loop keywords and common log patterns.
+  const loopHits = (cleaned.match(/\b(for|while|foreach)\b/gi) ?? []).length;
+  const logHits =
+    /\b(i\s*[\/*]=\s*2|i\s*=\s*i\s*[\/*]\s*2|>>=|<<=|\/\s*2|\*\s*2)\b/.test(
+      cleaned
+    ) ||
+    /\b(mid|low|high)\b/.test(cleaned); // binary search-ish variable names
+
+  if (loopHits === 0) return null;
+
+  let time = "O(n)";
+  if (loopHits >= 2) time = "O(n^2)";
+  if (loopHits >= 3) time = "O(n^3)";
+  if (logHits && loopHits === 1) time = "O(log n)";
+  if (logHits && loopHits >= 2) time = "O(n log n)";
+
+  notes.push(
+    "Could not fully parse as JavaScript; using a text-based heuristic from loop keywords."
+  );
+  notes.push(`Detected ~${loopHits} loop keyword(s).`);
+  if (logHits) notes.push("Loop/update looks logarithmic (divide/multiply/shift).");
+  notes.push(
+    "Tip: for best results, paste JavaScript (or TS without heavy type syntax)."
+  );
+
+  return { time, space: "O(1)", confidence: "low", notes };
+}
+
 export function estimateComplexity(code: string): ComplexityResult {
   const notes: string[] = [];
   let time = "O(1)";
@@ -48,6 +122,8 @@ export function estimateComplexity(code: string): ComplexityResult {
   try {
     ast = safeParse(code);
   } catch (e: any) {
+    const fallback = estimateFromText(code);
+    if (fallback) return fallback;
     return {
       time: "Unknown",
       space: "Unknown",
@@ -60,7 +136,6 @@ export function estimateComplexity(code: string): ComplexityResult {
   }
 
   // Track loop nesting and detect common patterns.
-  let currentLoopDepth = 0;
   let maxLoopDepth = 0;
   let sawLogLoop = false;
   let sawSortCall = false;
@@ -70,45 +145,30 @@ export function estimateComplexity(code: string): ComplexityResult {
   const functionStack: string[] = [];
   const recursionCalls: Record<string, number> = {};
 
-  walk.ancestor(ast as any, {
-    ForStatement(node: any, ancestors: any[]) {
+  const visitors: Record<string, any> = {
+    ForStatement(node: any, _state: any, ancestors: any[]) {
       if (!isLoopNode(node)) return;
-      currentLoopDepth++;
-      maxLoopDepth = Math.max(maxLoopDepth, currentLoopDepth);
+      const loopDepth = ancestors.filter(isLoopNode).length + 1;
+      maxLoopDepth = Math.max(maxLoopDepth, loopDepth);
       if (looksLikeLogLoop([node.test, node.update])) sawLogLoop = true;
     },
-    WhileStatement(node: any) {
-      currentLoopDepth++;
-      maxLoopDepth = Math.max(maxLoopDepth, currentLoopDepth);
+    WhileStatement(node: any, _state: any, ancestors: any[]) {
+      const loopDepth = ancestors.filter(isLoopNode).length + 1;
+      maxLoopDepth = Math.max(maxLoopDepth, loopDepth);
       if (looksLikeLogLoop(node.test)) sawLogLoop = true;
     },
-    DoWhileStatement(node: any) {
-      currentLoopDepth++;
-      maxLoopDepth = Math.max(maxLoopDepth, currentLoopDepth);
+    DoWhileStatement(node: any, _state: any, ancestors: any[]) {
+      const loopDepth = ancestors.filter(isLoopNode).length + 1;
+      maxLoopDepth = Math.max(maxLoopDepth, loopDepth);
       if (looksLikeLogLoop(node.test)) sawLogLoop = true;
     },
-    ForOfStatement(node: any) {
-      currentLoopDepth++;
-      maxLoopDepth = Math.max(maxLoopDepth, currentLoopDepth);
+    ForOfStatement(_node: any, _state: any, ancestors: any[]) {
+      const loopDepth = ancestors.filter(isLoopNode).length + 1;
+      maxLoopDepth = Math.max(maxLoopDepth, loopDepth);
     },
-    ForInStatement(node: any) {
-      currentLoopDepth++;
-      maxLoopDepth = Math.max(maxLoopDepth, currentLoopDepth);
-    },
-    "ForStatement:exit"() {
-      currentLoopDepth = Math.max(0, currentLoopDepth - 1);
-    },
-    "WhileStatement:exit"() {
-      currentLoopDepth = Math.max(0, currentLoopDepth - 1);
-    },
-    "DoWhileStatement:exit"() {
-      currentLoopDepth = Math.max(0, currentLoopDepth - 1);
-    },
-    "ForOfStatement:exit"() {
-      currentLoopDepth = Math.max(0, currentLoopDepth - 1);
-    },
-    "ForInStatement:exit"() {
-      currentLoopDepth = Math.max(0, currentLoopDepth - 1);
+    ForInStatement(_node: any, _state: any, ancestors: any[]) {
+      const loopDepth = ancestors.filter(isLoopNode).length + 1;
+      maxLoopDepth = Math.max(maxLoopDepth, loopDepth);
     },
 
     CallExpression(node: any) {
@@ -133,8 +193,8 @@ export function estimateComplexity(code: string): ComplexityResult {
     FunctionDeclaration(node: any) {
       if (node?.id?.name) functionStack.push(node.id.name);
     },
-    "FunctionDeclaration:exit"(node: any) {
-      if (node?.id?.name) functionStack.pop();
+    "FunctionDeclaration:exit"() {
+      functionStack.pop();
     },
     FunctionExpression(node: any) {
       if (node?.id?.name) functionStack.push(node.id.name);
@@ -150,16 +210,20 @@ export function estimateComplexity(code: string): ComplexityResult {
       functionStack.pop();
     },
 
-    NewExpression(node: any) {
-      if (currentLoopDepth > 0) allocInsideLoop = true;
+    NewExpression(_node: any, _state: any, ancestors: any[]) {
+      if (ancestors.some(isLoopNode)) allocInsideLoop = true;
     },
-    ArrayExpression(node: any) {
-      if (node?.elements?.length && currentLoopDepth > 0) allocInsideLoop = true;
+    ArrayExpression(node: any, _state: any, ancestors: any[]) {
+      if (node?.elements?.length && ancestors.some(isLoopNode)) allocInsideLoop = true;
     },
-    ObjectExpression(node: any) {
-      if (node?.properties?.length && currentLoopDepth > 0) allocInsideLoop = true;
+    ObjectExpression(node: any, _state: any, ancestors: any[]) {
+      if (node?.properties?.length && ancestors.some(isLoopNode)) allocInsideLoop = true;
     },
-  });
+  };
+
+  // acorn-walk's TS types don't model the `"Foo:exit"` visitor keys well.
+  // We keep this typed loosely since this is heuristic analysis code.
+  walk.ancestor(ast as any, visitors as any);
 
   // Time complexity
   if (maxLoopDepth === 0 && Object.keys(recursionCalls).length === 0 && !sawSortCall) {

@@ -4,6 +4,33 @@ import { hash, compare } from "bcrypt";
 import { createToken } from "../utils/token-manager.js";
 import { COOKIE_NAME } from "../utils/constants.js";
 
+function getCookieDomain() {
+  // In production, you typically should OMIT the domain so the cookie is host-only.
+  // If you do need it (e.g., custom domain / subdomains), set COOKIE_DOMAIN.
+  const d = process.env.COOKIE_DOMAIN?.trim();
+  if (!d) return undefined;
+  return d;
+}
+
+function getCookieOptions(expires: Date) {
+  const isProd = process.env.NODE_ENV === "production";
+  const sameSite = (process.env.COOKIE_SAMESITE?.trim() as
+    | "lax"
+    | "strict"
+    | "none"
+    | undefined) ?? (isProd ? "none" : "lax");
+
+  return {
+    path: "/",
+    domain: getCookieDomain(),
+    expires,
+    httpOnly: true,
+    signed: true,
+    secure: isProd, // required when SameSite=None
+    sameSite,
+  } as const;
+}
+
 export const getAllUsers = async (
   req: Request,
   res: Response,
@@ -35,22 +62,16 @@ export const userSignup = async (
 
     // create token and store cookie
     res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      domain: "localhost",
-      signed: true,
       path: "/",
+      domain: getCookieDomain(),
+      httpOnly: true,
+      signed: true,
     });
 
     const token = createToken(user._id.toString(), user.email, "7d");
     const expires = new Date();
     expires.setDate(expires.getDate() + 7);
-    res.cookie(COOKIE_NAME, token, {
-      path: "/",
-      domain: "localhost",
-      expires,
-      httpOnly: true,
-      signed: true,
-    });
+    res.cookie(COOKIE_NAME, token, getCookieOptions(expires));
 
     return res
       .status(201)
@@ -81,22 +102,16 @@ export const userLogin = async (
     // create token and store cookie
 
     res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      domain: "localhost",
-      signed: true,
       path: "/",
+      domain: getCookieDomain(),
+      httpOnly: true,
+      signed: true,
     });
 
     const token = createToken(user._id.toString(), user.email, "7d");
     const expires = new Date();
     expires.setDate(expires.getDate() + 7);
-    res.cookie(COOKIE_NAME, token, {
-      path: "/",
-      domain: "localhost",
-      expires,
-      httpOnly: true,
-      signed: true,
-    });
+    res.cookie(COOKIE_NAME, token, getCookieOptions(expires));
 
     return res
       .status(200)
@@ -146,10 +161,10 @@ export const userLogout = async (
     }
 
     res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      domain: "localhost",
-      signed: true,
       path: "/",
+      domain: getCookieDomain(),
+      httpOnly: true,
+      signed: true,
     });
 
     return res

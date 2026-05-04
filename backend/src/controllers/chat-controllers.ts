@@ -221,3 +221,78 @@ export const deleteChats = async (
     return res.status(200).json({ message: "ERROR", cause: error.message });
   }
 };
+
+export const editChatById = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const chatId = String(req.params.id || "").trim();
+    const content = String(req.body?.content || "").trim();
+    if (!chatId) return res.status(400).json({ message: "Chat id is required" });
+    if (!content) return res.status(422).json({ message: "content is required" });
+
+    const user = await User.findById(res.locals.jwtData.id);
+    if (!user) {
+      return res.status(401).send("User not registered OR Token malfunctioned");
+    }
+    if (user._id.toString() !== res.locals.jwtData.id) {
+      return res.status(401).send("Permissions didn't match");
+    }
+
+    const idx = (user.chats ?? []).findIndex((c: any) => c?.id === chatId);
+    if (idx === -1) return res.status(404).json({ message: "Chat not found" });
+
+    // Only allow editing user messages (not assistant).
+    if (user.chats[idx]?.role !== "user") {
+      return res.status(400).json({ message: "Only user messages can be edited" });
+    }
+
+    user.chats[idx].content = content;
+    await user.save();
+    return res.status(200).json({ message: "OK", chats: user.chats });
+  } catch (error: any) {
+    console.log(error);
+    return res.status(500).json({ message: "ERROR", cause: error?.message });
+  }
+};
+
+export const deleteChatById = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const chatId = String(req.params.id || "").trim();
+    if (!chatId) return res.status(400).json({ message: "Chat id is required" });
+
+    const user = await User.findById(res.locals.jwtData.id);
+    if (!user) {
+      return res.status(401).send("User not registered OR Token malfunctioned");
+    }
+    if (user._id.toString() !== res.locals.jwtData.id) {
+      return res.status(401).send("Permissions didn't match");
+    }
+
+    const idx = (user.chats ?? []).findIndex((c: any) => c?.id === chatId);
+    if (idx === -1) return res.status(404).json({ message: "Chat not found" });
+
+    // Delete the selected message, and if the next message is the assistant reply, delete it too.
+    const toRemove = [idx];
+    if (user.chats[idx + 1]?.role === "assistant") toRemove.push(idx + 1);
+    // remove from end to avoid index shifting
+    toRemove
+      .sort((a, b) => b - a)
+      .forEach((i) => {
+        // @ts-ignore
+        user.chats.splice(i, 1);
+      });
+
+    await user.save();
+    return res.status(200).json({ message: "OK", chats: user.chats });
+  } catch (error: any) {
+    console.log(error);
+    return res.status(500).json({ message: "ERROR", cause: error?.message });
+  }
+};

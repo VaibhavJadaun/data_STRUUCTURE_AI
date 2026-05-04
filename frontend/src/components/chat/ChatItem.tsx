@@ -1,4 +1,3 @@
-import React from "react";
 import { Box, Avatar, Typography } from "@mui/material";
 import { useAuth } from "../../context/useAuth";
 import { getUserInitials } from "../../utils/userInitials";
@@ -38,11 +37,14 @@ const ChatItem = ({
                 {children}
               </Typography>
             ),
-            code({ inline, className, children, ...props }) {
+            code({ className, children }: any) {
+              // react-markdown may pass props like `inline` that aren't valid HTML attributes
+              // for a real <code> element. We intentionally don't spread those through.
               const match = /language-(\w+)/.exec(className || "");
-              if (inline) {
+              const isInline = !match;
+              if (isInline) {
                 return (
-                  <code className={className} {...props}>
+                  <code className={className}>
                     {children}
                   </code>
                 );

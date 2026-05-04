@@ -7,7 +7,19 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import { Toaster } from "react-hot-toast";
 import axios from "axios";
-axios.defaults.baseURL = "http://localhost:5000/api/v1";
+
+function resolveApiBaseUrl(): string {
+  // Prefer same-origin in production when frontend is proxied behind backend/reverse-proxy.
+  // For local dev, fall back to common backend port.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") return "http://localhost:5000/api/v1";
+    return "/api/v1";
+  }
+  return "/api/v1";
+}
+
+axios.defaults.baseURL = resolveApiBaseUrl();
 axios.defaults.withCredentials = true;
 const theme = createTheme({
   typography: {

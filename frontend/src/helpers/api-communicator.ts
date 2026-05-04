@@ -1,4 +1,18 @@
 import axios from "axios";
+
+export type QuizAnswerPayload = {
+  questionId: string;
+  selectedOptionIndex: number;
+};
+
+export type CodeReviewFeedback = {
+  time_complexity: string;
+  space_complexity: string;
+  issues: string[];
+  optimizations: string[];
+  clean_code_suggestions: string[];
+  improved_code: string;
+};
 export const loginUser = async (email: string, password: string) => {
   const res = await axios.post("/user/login", { email, password });
   if (res.status !== 200) {
@@ -62,6 +76,24 @@ export const deleteUserChats = async () => {
   return data;
 };
 
+export const editUserChatMessage = async (id: string, content: string) => {
+  const res = await axios.patch(`/chat/message/${encodeURIComponent(id)}`, {
+    content,
+  });
+  if (res.status !== 200) {
+    throw new Error("Unable to edit chat");
+  }
+  return res.data;
+};
+
+export const deleteUserChatMessage = async (id: string) => {
+  const res = await axios.delete(`/chat/message/${encodeURIComponent(id)}`);
+  if (res.status !== 200) {
+    throw new Error("Unable to delete chat message");
+  }
+  return res.data;
+};
+
 export const logoutUser = async () => {
   const res = await axios.get("/user/logout");
   if (res.status !== 200) {
@@ -69,4 +101,33 @@ export const logoutUser = async () => {
   }
   const data = await res.data;
   return data;
+};
+
+export const getQuizQuestions = async (limit = 5) => {
+  const res = await axios.get(`/quiz/quiz-questions?limit=${limit}`);
+  if (res.status !== 200) {
+    throw new Error("Unable to fetch quiz questions");
+  }
+  return res.data;
+};
+
+export const submitQuizAnswers = async (answers: QuizAnswerPayload[]) => {
+  const res = await axios.post("/quiz/submit-quiz", { answers });
+  if (res.status !== 200) {
+    throw new Error("Unable to submit quiz");
+  }
+  return res.data;
+};
+
+export const reviewCodeRequest = async (code: string, language?: string) => {
+  try {
+    const res = await axios.post("/review-code", { code, language });
+    return res.data as CodeReviewFeedback;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.data) {
+      const body = err.response.data as { message?: string };
+      if (typeof body.message === "string") throw new Error(body.message);
+    }
+    throw err instanceof Error ? err : new Error("Unable to review code");
+  }
 };

@@ -1,5 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Box, Avatar, Typography, Button, IconButton } from "@mui/material";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Box, Avatar, Typography, Button, IconButton, Stack, Paper } from "@mui/material";
 import red from "@mui/material/colors/red";
 import { useAuth } from "../context/useAuth";
 import ChatItem from "../components/chat/ChatItem";
@@ -7,18 +7,22 @@ import { IoMdSend } from "react-icons/io";
 import { useNavigate } from "react-router-dom";
 import {
   deleteUserChats,
+  deleteUserChatMessage,
+  editUserChatMessage,
   getUserChats,
   sendChatRequest,
 } from "../helpers/api-communicator";
 import toast from "react-hot-toast";
 import { getUserInitials } from "../utils/userInitials";
 type Message = {
+  id?: string;
   role: "user" | "assistant";
   content: string;
 };
 const Chat = () => {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const messageRefs = useRef<Array<HTMLDivElement | null>>([]);
   const auth = useAuth();
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const handleSubmit = async () => {
@@ -73,6 +77,59 @@ const Chat = () => {
       return navigate("/login");
     }
   }, [auth]);
+
+  const userQuestions = chatMessages
+    .map((m, idx) => ({ ...m, idx }))
+    .filter((m) => m.role === "user")
+    .map((m) => ({
+      idx: m.idx,
+      id: m.id,
+      text: m.content.length > 60 ? `${m.content.slice(0, 60)}…` : m.content,
+    }));
+
+  const handleEditHistory = async (q: { id?: string; idx: number; text: string }) => {
+    const msg = chatMessages[q.idx];
+    if (!msg?.id) {
+      toast.error("This message can't be edited (missing id).");
+      return;
+    }
+    const next = window.prompt("Edit your question:", msg.content);
+    if (next === null) return; // cancelled
+    const content = next.trim();
+    if (!content) {
+      toast.error("Message cannot be empty");
+      return;
+    }
+    try {
+      toast.loading("Updating...", { id: "editmsg" });
+      const data = await editUserChatMessage(msg.id, content);
+      if (data?.chats?.length) setChatMessages([...data.chats]);
+      toast.success("Updated", { id: "editmsg" });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Edit failed";
+      toast.error(err, { id: "editmsg" });
+    }
+  };
+
+  const handleDeleteHistory = async (q: { id?: string; idx: number; text: string }) => {
+    const msg = chatMessages[q.idx];
+    if (!msg?.id) {
+      toast.error("This message can't be deleted (missing id).");
+      return;
+    }
+    const ok = window.confirm("Delete this question (and its answer) from history?");
+    if (!ok) return;
+    try {
+      toast.loading("Deleting...", { id: "deletemsg" });
+      const data = await deleteUserChatMessage(msg.id);
+      if (data?.chats) setChatMessages([...data.chats]);
+      toast.success("Deleted", { id: "deletemsg" });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Delete failed";
+      toast.error(err, { id: "deletemsg" });
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -139,6 +196,91 @@ const Chat = () => {
             Clear Conversation
           </Button>
         </Box>
+
+        <Paper
+          elevation={0}
+          sx={{
+            mt: 2,
+            mx: 3,
+            p: 1.5,
+            borderRadius: 3,
+            bgcolor: "rgba(17,29,39,0.9)",
+            border: "1px solid rgba(219,216,227,0.10)",
+            maxHeight: "30vh",
+            overflowY: "auto",
+          }}
+        >
+          <Typography sx={{ fontFamily: "work sans", mb: 1, opacity: 0.9 }}>
+            Your history
+          </Typography>
+          <Stack spacing={0.75}>
+            {userQuestions.length === 0 ? (
+              <Typography sx={{ fontSize: 13, opacity: 0.75 }}>
+                Ask a question to start building history.
+              </Typography>
+            ) : (
+              userQuestions
+                .slice()
+                .reverse()
+                .map((q) => (
+                  <Stack
+                    key={`q-${q.id ?? q.idx}`}
+                    direction="row"
+                    spacing={0.5}
+                    alignItems="stretch"
+                  >
+                    <Button
+                      variant="text"
+                      onClick={() =>
+                        messageRefs.current[q.idx]?.scrollIntoView({ behavior: "smooth" })
+                      }
+                      sx={{
+                        flex: 1,
+                        justifyContent: "flex-start",
+                        textTransform: "none",
+                        color: "rgba(219,216,227,0.9)",
+                        bgcolor: "rgba(0,0,0,0.15)",
+                        borderRadius: 2,
+                        px: 1,
+                        py: 0.75,
+                        ":hover": { bgcolor: "rgba(0,0,0,0.25)" },
+                        fontSize: 13,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {q.text}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleEditHistory(q)}
+                      sx={{
+                        minWidth: 0,
+                        px: 1,
+                        borderColor: "rgba(219,216,227,0.25)",
+                        color: "rgba(219,216,227,0.9)",
+                        ":hover": { borderColor: "rgba(219,216,227,0.45)" },
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleDeleteHistory(q)}
+                      sx={{
+                        minWidth: 0,
+                        px: 1,
+                        borderColor: "rgba(255, 99, 132, 0.35)",
+                        color: "rgba(255, 99, 132, 0.95)",
+                        ":hover": { borderColor: "rgba(255, 99, 132, 0.6)" },
+                      }}
+                    >
+                      Del
+                    </Button>
+                  </Stack>
+                ))
+            )}
+          </Stack>
+        </Paper>
       </Box>
       <Box
         sx={{
@@ -187,7 +329,14 @@ const Chat = () => {
           }}
         >
           {chatMessages.map((chat, index) => (
-            <ChatItem content={chat.content} role={chat.role} key={index} />
+            <div
+              key={chat.id ?? index}
+              ref={(el) => {
+                messageRefs.current[index] = el;
+              }}
+            >
+              <ChatItem content={chat.content} role={chat.role} />
+            </div>
           ))}
         </Box>
         <div

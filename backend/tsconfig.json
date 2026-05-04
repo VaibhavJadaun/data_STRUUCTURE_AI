@@ -4,8 +4,12 @@
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "sourceMap": true,
-   
-    "allowSyntheticDefaultImports": true
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "src/index.ts"]
 }
