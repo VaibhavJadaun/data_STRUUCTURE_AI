@@ -12,21 +12,51 @@ function getCookieDomain() {
   return d;
 }
 
-function getCookieOptions(expires: Date) {
-  const isProd = process.env.NODE_ENV === "production";
-  const sameSite = (process.env.COOKIE_SAMESITE?.trim() as
+/** HTTPS deploys (Render, etc.) need cross-site cookies for separate frontend/backend hosts. */
+function isProductionLike(): boolean {
+  if (process.env.NODE_ENV === "production") return true;
+  if (process.env.RENDER === "true" || process.env.RENDER === "1") return true;
+  if (
+    process.env.RENDER_EXTERNAL_URL?.toLowerCase().includes("onrender.com")
+  )
+    return true;
+  return false;
+}
+
+function getCookieSecurity(): { sameSite: "lax" | "strict" | "none"; secure: boolean } {
+  const fromEnv = process.env.COOKIE_SAMESITE?.trim() as
     | "lax"
     | "strict"
     | "none"
-    | undefined) ?? (isProd ? "none" : "lax");
+    | undefined;
+  const prodLike = isProductionLike();
+  const sameSite = fromEnv ?? (prodLike ? "none" : "lax");
+  // SameSite=None requires Secure. Cross-subdomain API calls need None on Render.
+  const secure = sameSite === "none" ? true : prodLike;
+  return { sameSite, secure };
+}
 
+function getClearCookieOptions() {
+  const { sameSite, secure } = getCookieSecurity();
+  return {
+    path: "/",
+    domain: getCookieDomain(),
+    httpOnly: true,
+    signed: true,
+    secure,
+    sameSite,
+  } as const;
+}
+
+function getCookieOptions(expires: Date) {
+  const { sameSite, secure } = getCookieSecurity();
   return {
     path: "/",
     domain: getCookieDomain(),
     expires,
     httpOnly: true,
     signed: true,
-    secure: isProd, // required when SameSite=None
+    secure,
     sameSite,
   } as const;
 }
@@ -61,12 +91,7 @@ export const userSignup = async (
     await user.save();
 
     // create token and store cookie
-    res.clearCookie(COOKIE_NAME, {
-      path: "/",
-      domain: getCookieDomain(),
-      httpOnly: true,
-      signed: true,
-    });
+    res.clearCookie(COOKIE_NAME, getClearCookieOptions());
 
     const token = createToken(user._id.toString(), user.email, "7d");
     const expires = new Date();
@@ -101,12 +126,7 @@ export const userLogin = async (
 
     // create token and store cookie
 
-    res.clearCookie(COOKIE_NAME, {
-      path: "/",
-      domain: getCookieDomain(),
-      httpOnly: true,
-      signed: true,
-    });
+    res.clearCookie(COOKIE_NAME, getClearCookieOptions());
 
     const token = createToken(user._id.toString(), user.email, "7d");
     const expires = new Date();
@@ -160,12 +180,7 @@ export const userLogout = async (
       return res.status(401).send("Permissions didn't match");
     }
 
-    res.clearCookie(COOKIE_NAME, {
-      path: "/",
-      domain: getCookieDomain(),
-      httpOnly: true,
-      signed: true,
-    });
+    res.clearCookie(COOKIE_NAME, getClearCookieOptions());
 
     return res
       .status(200)
